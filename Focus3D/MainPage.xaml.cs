@@ -15,6 +15,7 @@ using System.IO.IsolatedStorage;
 using Microsoft.Xna.Framework.Media;
 using Windows.Phone.Media.Capture;
 using System.Windows.Media.Imaging;
+using System.ComponentModel;
 
 namespace Focus3D
 {
@@ -27,6 +28,7 @@ namespace Focus3D
         private int focusRange = 0;
         CameraFocusStatus s = CameraFocusStatus.Locked;
         private WriteableBitmap wb, wb2, wb3, wb4;
+        private BackgroundWorker bw1, bw2, bw3, bw4;
         private byte[] byteBuffer;
         private int[] intBuffer;
         // Constructor
@@ -121,6 +123,29 @@ namespace Focus3D
                 //Set the VideoBrush source to the camera.
                 //viewfinderBrush.SetSource(cam);
                  * */
+                bw1 = new BackgroundWorker();
+                bw1.WorkerReportsProgress = false;
+                bw1.WorkerSupportsCancellation = true;
+                bw1.DoWork += bw_DoWork;
+                bw1.RunWorkerCompleted +=bw_RunWorkerCompleted;
+
+                bw2 = new BackgroundWorker();
+                bw2.WorkerReportsProgress = false;
+                bw2.WorkerSupportsCancellation = true;
+                bw2.DoWork += bw_DoWork;
+                bw2.RunWorkerCompleted += bw_RunWorkerCompleted;
+
+                bw3 = new BackgroundWorker();
+                bw3.WorkerReportsProgress = false;
+                bw3.WorkerSupportsCancellation = true;
+                bw3.DoWork += bw_DoWork;
+                bw3.RunWorkerCompleted += bw_RunWorkerCompleted;
+
+                bw4 = new BackgroundWorker();
+                bw4.WorkerReportsProgress = false;
+                bw4.WorkerSupportsCancellation = true;
+                bw4.DoWork += bw_DoWork;
+                bw4.RunWorkerCompleted += bw_RunWorkerCompleted;
             }
             else
             {
@@ -173,13 +198,10 @@ namespace Focus3D
         // Ensure that the viewfinder is upright in LandscapeRight.
         protected override void OnOrientationChanged(OrientationChangedEventArgs e)
         {
-            if (cam != null)
+            if (camManual != null)
             {
                 // LandscapeRight rotation when camera is on back of phone.
                 int landscapeRightRotation = 180;
-
-                // Change LandscapeRight rotation for front-facing camera.
-                if (cam.CameraType == CameraType.FrontFacing) landscapeRightRotation = -180;
 
                 // Rotate video brush from camera.
                 if (e.Orientation == PageOrientation.LandscapeRight)
@@ -331,6 +353,47 @@ namespace Focus3D
                 }
             }
         }
+
+        private void bw_DoWork(object sender, DoWorkEventArgs e)
+        {
+            BackgroundWorker worker = sender as BackgroundWorker;
+
+            for (int i = 1; i <= 10; i++)
+            {
+                if ((worker.CancellationPending == true))
+                {
+                    e.Cancel = true;
+                    break;
+                }
+                else
+                {
+                    // Perform a time consuming operation and report progress.
+                    try
+                    {
+                        byte[] buff = e.Argument as byte[];
+
+                    }
+                    finally
+                    {
+                        e.Cancel = true;
+                    }
+                }
+            }
+        }
+
+        private void bw_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            if (!(e.Cancelled == true && !(e.Error == null)))
+            {
+                BackgroundWorker bw = sender as BackgroundWorker;
+            }
+            else
+            {
+                this.txtDebug.Text = "image process error";
+            }
+        }
+
+
 
         void cam_CaptureCompleted(object sender, CameraOperationCompletedEventArgs e)
         {

@@ -10,18 +10,18 @@
     FontFamily="{StaticResource PhoneFontFamilyNormal}"
     FontSize="{StaticResource PhoneFontSizeNormal}"
     Foreground="{StaticResource PhoneForegroundBrush}"
-    SupportedOrientations="Landscape" Orientation="LandscapeLeft"
+    SupportedOrientations="Landscape" Orientation="Landscape"
     shell:SystemTray.IsVisible="False">
 
     <!--LayoutRoot is the root grid where all page content is placed-->
     <Grid x:Name="LayoutRoot" Background="Transparent">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="640" />
-            <ColumnDefinition Width="160" />
+            <ColumnDefinition Width="Auto" MinWidth="710"/>
+            <ColumnDefinition />
         </Grid.ColumnDefinitions>
 
         <!--Camera viewfinder >-->
-        <Rectangle Width="640" Height="480" HorizontalAlignment="Left" >
+        <Rectangle Width="710" Height="480" HorizontalAlignment="Left" Grid.Column="0">
             <Rectangle.Fill>
                 <VideoBrush x:Name="viewfinderBrush" />
             </Rectangle.Fill>
@@ -40,17 +40,17 @@
         <Image x:Name="MainImage3" 
                Width="320" Height="240" 
                HorizontalAlignment="Left" VerticalAlignment="Bottom"  
-               Margin="325,0,0,240"
-               Stretch="Uniform" Grid.ColumnSpan="2"/>
+               Margin="390,0,0,240"
+               Stretch="Uniform"/>
         <Image x:Name="MainImage4" 
                Width="320" Height="240" 
                HorizontalAlignment="Left" VerticalAlignment="Bottom"  
-               Margin="325,0,0,0"
-               Stretch="Uniform" Grid.ColumnSpan="2"/>
+               Margin="390,0,0,0"
+               Stretch="Uniform"/>
 
         <!--Button StackPanel to the right of viewfinder>-->
         <StackPanel Grid.Column="1" >
-            <Button x:Name="ShutterButton" Content="SH" Click="ShutterButton_Click" FontSize="26" FontWeight="ExtraBold" Height="75" />
+            <Button x:Name="ShutterButton" Content="SH" Click="ShutterButton_Click" FontSize="26" FontWeight="Bold" Height="75" />
             <Slider ValueChanged="Slider_ValueChanged" Orientation="Vertical" Height="354" Maximum="1000" LargeChange="5"/>
         </StackPanel>
 
