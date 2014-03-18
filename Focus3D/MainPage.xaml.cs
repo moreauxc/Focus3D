@@ -16,6 +16,7 @@ using Microsoft.Xna.Framework.Media;
 using Windows.Phone.Media.Capture;
 using System.Windows.Media.Imaging;
 using System.ComponentModel;
+using Nokia.Graphics.Imaging;
 
 namespace Focus3D
 {
@@ -30,10 +31,17 @@ namespace Focus3D
         private WriteableBitmap wb, wb2, wb3, wb4;
         private BackgroundWorker bw1, bw2, bw3, bw4;
         private byte[] byteBuffer;
+        private byte[] prevBuffer;
+        private byte[] depthBuffer;
         private int[] intBuffer;
+        private int[] _sharpnessArea;
+        private int[] _sharpnessMap;
+        private FocusMap bufferMap, bufferMap2;
+        private Windows.Foundation.Size _previewFrameSize = new Windows.Foundation.Size();
         // Constructor
         public MainPage()
         {
+            
             InitializeComponent();
 
             // Sample code to localize the ApplicationBar
@@ -64,6 +72,9 @@ namespace Focus3D
             camManual.PreviewFrameAvailable += photoDevice_PreviewFrameAvailable;
             //Set the VideoBrush source to the camera.
             viewfinderBrush.SetSource(camManual);
+
+            _previewFrameSize = camManual.PreviewResolution;
+            _sharpnessArea = new int[] { 1, 1 };
             // Display camera viewfinder data in XAML videoBrush element
             wb = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
             this.MainImage.Source = wb;
@@ -76,8 +87,9 @@ namespace Focus3D
 
             wb4 = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
             this.MainImage4.Source = wb4;
-
+            depthBuffer = new byte[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
             byteBuffer = new byte[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
+            prevBuffer = new byte[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
             intBuffer = new int[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
         }
 
@@ -228,111 +240,173 @@ namespace Focus3D
             {
                 try
                 {
-                   /* int[] buffer = new int[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
+                    /* int[] buffer = new int[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
                     
-                    camManual.GetPreviewBufferArgb(buffer);
-                    // Save thumbnail as JPEG to the local folder.
-                    Deployment.Current.Dispatcher.BeginInvoke(delegate()
-                {
-                    // Copy to WriteableBitmap.
-                    buffer.CopyTo(wb.Pixels, 0);
-                    wb.Invalidate();
+                     camManual.GetPreviewBufferArgb(buffer);
+                     // Save thumbnail as JPEG to the local folder.
+                     Deployment.Current.Dispatcher.BeginInvoke(delegate()
+                 {
+                     // Copy to WriteableBitmap.
+                     buffer.CopyTo(wb.Pixels, 0);
+                     wb.Invalidate();
 
-                });
-                    */
+                 });
+                     */
                     //CAPTURE FIRST FOCUS
-                    camManual.GetPreviewBufferY(byteBuffer);
-                    byte[] b = { 255, 155, 155, 225 };
-
-                    for (int i = 0; i < byteBuffer.Length-1; i++ )
+                    CameraCapturePropertyRange range = PhotoCaptureDevice.GetSupportedPropertyRange(CameraSensorLocation.Back, KnownCameraGeneralProperties.ManualFocusPosition);
+                    UInt32 max = (UInt32)range.Max;
+                    UInt32 min = (UInt32)range.Min;
+                    if (!((bool)checkboxSave.IsChecked))
                     {
-                        b[0] = byteBuffer[i];
-                        b[1] = byteBuffer[i];
-                        b[2] = byteBuffer[i];
-                        intBuffer[i] = BitConverter.ToInt32(b,0);
+                        /*
+                        if (focusRange >= max - 4)
+                            focusRange = (int)max - 10;
 
+                        int focusStep = (100 < ((int)max - focusRange) / 3 ? 100 : ((int)max - focusRange) / 3);
+                        camManual.GetPreviewBufferY(byteBuffer);
+                        byte[] b = { 255, 155, 155, 225 };
+
+                        for (int i = 0; i < byteBuffer.Length - 1; i++)
+                        {
+                            b[0] = byteBuffer[i];
+                            b[1] = byteBuffer[i];
+                            b[2] = byteBuffer[i];
+                            intBuffer[i] = BitConverter.ToInt32(b, 0);
+
+                        }
+                        */
+                        for (int i = 500; i < (int)max; i += ((int)max/100))
+                        {
+                            camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, i);
+                            focusRange = i;
+                            await camManual.FocusAsync();
+                            camManual.GetPreviewBufferY(byteBuffer);
+                            generateSharpnessMap(byteBuffer);
+                        }
+
+                        for (int i = 0; i < byteBuffer.Length; i++)
+                        {
+                            intBuffer[i] = BitConverter.ToInt32(new byte[] { depthBuffer[i], depthBuffer[i], depthBuffer[i], 255 }, 0);
+
+                        }
+                            Deployment.Current.Dispatcher.BeginInvoke(delegate()
+                            {
+                                // Copy to WriteableBitmap.
+                                intBuffer.CopyTo(wb.Pixels, 0);
+                                wb.Invalidate();
+
+                            });
+                        /*
+                        generateSharpnessMap(byteBuffer);
+
+                        //CAPTURE SECOND FOCUS
+                        camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, focusRange + focusStep);
+                        await camManual.FocusAsync();
+                        camManual.GetPreviewBufferY(byteBuffer);
+                        for (int i = 0; i < byteBuffer.Length - 1; i++)
+                        {
+                            b[0] = byteBuffer[i];
+                            b[1] = byteBuffer[i];
+                            b[2] = byteBuffer[i];
+                            intBuffer[i] = BitConverter.ToInt32(b, 0);
+
+                        }
+                        // Save thumbnail as JPEG to the local folder.
+                        Deployment.Current.Dispatcher.BeginInvoke(delegate()
+                        {
+                            // Copy to WriteableBitmap.
+                            intBuffer.CopyTo(wb2.Pixels, 0);
+                            wb2.Invalidate();
+
+                        });
+                        generateSharpnessMap(byteBuffer);
+
+                        //CAPTURE THIRD FOCUS
+                        camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, focusRange + focusStep);
+                        await camManual.FocusAsync();
+                        camManual.GetPreviewBufferY(byteBuffer);
+
+                        for (int i = 0; i < byteBuffer.Length - 1; i++)
+                        {
+                            b[0] = byteBuffer[i];
+                            b[1] = byteBuffer[i];
+                            b[2] = byteBuffer[i];
+                            intBuffer[i] = BitConverter.ToInt32(b, 0);
+
+                        }
+                        // Save thumbnail as JPEG to the local folder.
+                        Deployment.Current.Dispatcher.BeginInvoke(delegate()
+                        {
+                            // Copy to WriteableBitmap.
+                            intBuffer.CopyTo(wb3.Pixels, 0);
+                            wb3.Invalidate();
+
+                        });
+                        generateSharpnessMap(byteBuffer);
+
+                        //CAPTURE FOURTH/FINAL FOCUS
+                        camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, focusRange + focusStep);
+                        await camManual.FocusAsync();
+                        camManual.GetPreviewBufferY(byteBuffer);
+
+                        for (int i = 0; i < byteBuffer.Length - 1; i++)
+                        {
+                            b[0] = byteBuffer[i];
+                            b[1] = byteBuffer[i];
+                            b[2] = byteBuffer[i];
+                            intBuffer[i] = BitConverter.ToInt32(b, 0);
+
+                        }
+                        
+                        generateSharpnessMap(byteBuffer);
+                        for (int i = 0; i < byteBuffer.Length - 1; i++)
+                            intBuffer[i] = BitConverter.ToInt32(new byte[] { depthBuffer[i], depthBuffer[i], depthBuffer[i], 255 }, 0);
+
+                        // Save thumbnail as JPEG to the local folder.
+                        Deployment.Current.Dispatcher.BeginInvoke(delegate()
+                        {
+                            // Copy to WriteableBitmap.
+                            intBuffer.CopyTo(wb4.Pixels, 0);
+                            wb4.Invalidate();
+
+                        });
+                         */
                     }
-                    // Save thumbnail as JPEG to the local folder.
-                    Deployment.Current.Dispatcher.BeginInvoke(delegate()
+                    else
                     {
-                        // Copy to WriteableBitmap.
-                        intBuffer.CopyTo(wb.Pixels, 0);
-                        wb.Invalidate();
+                        /*var wbitmap = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
+                        for (int i = (int)min; i <= max; i += 20)
+                        {
+                            camManual.GetPreviewBufferArgb(wbitmap.Pixels);
+                            camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, i);
+                            await camManual.FocusAsync();
+                            using (var stream = new MemoryStream())
+                            {
 
-                    });
-
-
-                    //CAPTURE SECOND FOCUS
-                    camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, focusRange + 100);
-                    await camManual.FocusAsync();
-                    camManual.GetPreviewBufferY(byteBuffer);
-
-                    for (int i = 0; i < byteBuffer.Length - 1; i++)
-                    {
-                        b[0] = byteBuffer[i];
-                        b[1] = byteBuffer[i];
-                        b[2] = byteBuffer[i];
-                        intBuffer[i] = BitConverter.ToInt32(b, 0);
-
+                                wbitmap.SaveJpeg(stream, wbitmap.PixelWidth, wbitmap.PixelHeight, 0, 100);
+                                stream.Seek(0, SeekOrigin.Begin);
+                                new MediaLibrary().SavePicture("focus_at_" + i + ".jpg", stream);
+                            }
+                        }
+                         */
+                        byte[] yBuffer = new byte[(int)camManual.PreviewResolution.Width * (int)camManual.PreviewResolution.Height];
+                        for (int i = 0; i < yBuffer.Length; i++)
+                            yBuffer[i] = (byte) (i/((int)camManual.PreviewResolution.Width));
+                         
+                        int[] sharpnessTest = edgeDetect(yBuffer, (int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
+                        var wbitmap = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
+                        camManual.GetPreviewBufferArgb(wbitmap.Pixels);
+                        using (var stream = new MemoryStream())
+                        {
+                            wbitmap.SaveJpeg(stream, wbitmap.PixelWidth, wbitmap.PixelHeight, 0, 100);
+                            stream.Seek(0, SeekOrigin.Begin);
+                            new MediaLibrary().SavePicture("focus_at_" + focusRange + ".jpg", stream);
+                        }
                     }
-                    // Save thumbnail as JPEG to the local folder.
-                    Deployment.Current.Dispatcher.BeginInvoke(delegate()
-                    {
-                        // Copy to WriteableBitmap.
-                        intBuffer.CopyTo(wb2.Pixels, 0);
-                        wb2.Invalidate();
-
-                    });
-
-
-                    //CAPTURE THIRD FOCUS
-                    camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, focusRange + 200);
-                    await camManual.FocusAsync();
-                    camManual.GetPreviewBufferY(byteBuffer);
-
-                    for (int i = 0; i < byteBuffer.Length - 1; i++)
-                    {
-                        b[0] = byteBuffer[i];
-                        b[1] = byteBuffer[i];
-                        b[2] = byteBuffer[i];
-                        intBuffer[i] = BitConverter.ToInt32(b, 0);
-
-                    }
-                    // Save thumbnail as JPEG to the local folder.
-                    Deployment.Current.Dispatcher.BeginInvoke(delegate()
-                    {
-                        // Copy to WriteableBitmap.
-                        intBuffer.CopyTo(wb3.Pixels, 0);
-                        wb3.Invalidate();
-
-                    });
-
-
-                    //CAPTURE FOURTH/FINAL FOCUS
-                    camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, focusRange + 300);
-                    await camManual.FocusAsync();
-                    camManual.GetPreviewBufferY(byteBuffer);
-
-                    for (int i = 0; i < byteBuffer.Length - 1; i++)
-                    {
-                        b[0] = byteBuffer[i];
-                        b[1] = byteBuffer[i];
-                        b[2] = byteBuffer[i];
-                        intBuffer[i] = BitConverter.ToInt32(b, 0);
-
-                    }
-                    // Save thumbnail as JPEG to the local folder.
-                    Deployment.Current.Dispatcher.BeginInvoke(delegate()
-                    {
-                        // Copy to WriteableBitmap.
-                        intBuffer.CopyTo(wb4.Pixels, 0);
-                        wb4.Invalidate();
-
-                    });
                 }
-                catch (Exception)
+                catch (Exception eg)
                 {
-                    
+
                     throw;
                 }
             }
@@ -506,9 +580,11 @@ namespace Focus3D
         private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             focusRange = (int) e.NewValue;
-            
             if (s == CameraFocusStatus.Locked)
+            {
                 changeFocus();
+                textBox.Text = "" + focusRange;
+            }
         }
 
         private async void changeFocus() {
@@ -517,5 +593,288 @@ namespace Focus3D
 
         }
 
+        private void ClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            int[] b = new int[wb.PixelWidth * wb.PixelHeight];
+            for  (int i = 0; i < wb.PixelWidth * wb.PixelHeight; i++)
+                b[i] = 0;
+            b.CopyTo(wb.Pixels, 0);
+            b.CopyTo(wb2.Pixels, 0);
+            b.CopyTo(wb3.Pixels, 0);
+            b.CopyTo(wb4.Pixels, 0);
+        }
+
+        private void generateSharpnessMap(byte[] data)
+        {
+            // Dimensions of the original frame
+            int w = (int)camManual.PreviewResolution.Width;
+            int h = (int)camManual.PreviewResolution.Height;
+
+            // and the scaled down sub-image
+            int ws = w / _sharpnessArea[0];
+            int hs = h / _sharpnessArea[1];
+
+            CameraCapturePropertyRange range = PhotoCaptureDevice.GetSupportedPropertyRange(CameraSensorLocation.Back, KnownCameraGeneralProperties.ManualFocusPosition);
+                    UInt32 max = (UInt32)range.Max;
+                    UInt32 min = (UInt32)range.Min;
+            // Generate a new buffer for the sharpness map. CAUTION: in production code we should check the dimension as well
+            // because the preview resolution might have changed.
+            ///if (_sharpnessMap == null)
+            //{
+            //    _sharpnessMap = new int[hs * ws];
+            //}
+            if (bufferMap == null)
+                bufferMap = new FocusMap(ws, hs);
+
+            
+            // Calculate sharpness for each sub image
+            /*
+            int x, y;
+            int sharpness;
+            for (y = 0; y < hs; y++)
+            {
+                for (x = 0; x < ws; x++)
+                {
+                    sharpness = calculateSharpness_variance(x * ws, y * hs, ws, hs, w, data);
+                    bufferMap.set(y * _sharpnessArea[0] + x, sharpness);
+                }
+            }
+             */
+            bufferMap.set(edgeDetect(data, w, h));
+            if (bufferMap2 == null)
+            {
+                bufferMap2 = new FocusMap(ws, hs);
+                bufferMap2.set(bufferMap.get());
+            }
+            bool[] cmpSet = bufferMap > bufferMap2;
+            byte focusColor = (byte) (Math.Pow((double)(focusRange - 500) / (max - 500), .5) * 255);
+            int[] testIndices = new int[depthBuffer.Length];
+            int ind = 0;
+            int prevLoc = 0;
+            for (int k = 0; k < cmpSet.Length; k++)
+            {
+                if (cmpSet[k])
+                    bufferMap.setTrigger(k);
+                else if (bufferMap2.triggered(k))
+                {
+                    //bufferMap.cancelTrigger(k);
+                    int location = (int)((double)(k / ws) / hs * h * w + ((double)(k % ws) / ws * w));
+                    
+                    for (int y = 0; y < _sharpnessArea[1]; y++)
+                        for (int x = 0; x < _sharpnessArea[0]; x++)
+                        {
+                            testIndices[ind++] = focusColor;
+                            depthBuffer[location + y * w + x] = focusColor;
+                        }
+                    if (location != prevLoc)
+                    {
+                        //prevLoc = location;
+
+                    }
+                }
+            }
+            bufferMap2.set(bufferMap.get());
+            bufferMap2.setTrigger(bufferMap.triggered());
+        }
+
+        private int calculateSharpness_variance(int x, int y, int w, int h, int stride, byte[] data)
+        {
+            int lumSum = 0;
+            int lumSquared = 0;
+            int numPixels = w * h;
+
+            int i, j;
+
+            for (j = y; j < y + h; j++)
+            {
+                for (i = x; i < x + w; i++)
+                {
+                    int lum = data[j * stride + i];
+
+                    lumSum += (lum / numPixels);
+                    lumSquared += ((lum * lum) / numPixels);
+                }
+            }
+
+            return lumSquared - (lumSum * lumSum);
+        }
+
+        private void TextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                int val =  int.Parse(textBox.Text);
+                if (val > 1000)
+                {
+                    val = 1000;
+                    textBox.Text = "1000";
+                }
+                else if (val < 0)
+                {
+                    val = 0;
+                    textBox.Text = "0";
+                }
+                focusRange = val;
+                changeFocus();
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+
+        }
+
+  
+
+        private void textBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            textBox.SelectAll();
+        }
+
+        private int[] edgeDetect(byte[] inArr, int width, int height)
+        {
+            //int width = (int) _previewFrameSize.Width;
+            //int height = (int)_previewFrameSize.Height;
+            int sWidth = _sharpnessArea[0];
+            int sHeight = _sharpnessArea[1];
+            //byte[] midArr = new byte[inArr.Length];
+            byte[] buffer = new byte[(width + 2) * 3];
+            //int[] addArr = new int[sWidth * sHeight];
+            int[] outArr = new int[inArr.Length];
+            /*
+            buffer[0] = inArr[0];
+            buffer[width + 1] = inArr[width - 1];
+            for (int i = 0; i < width; i++)
+                buffer[i + 1] = inArr[i];
+            */
+            for (int i = 0; i < 2; i++)
+            {
+                buffer[i * (width + 2)] = inArr[0];
+                buffer[i * (width + 2) + width + 1] = inArr[width - 1];
+                for (int j = 0; j < width; j++)
+                {
+                    buffer[i*(width + 2) + j + 1] = inArr[j];
+                }
+
+            }
+            Console.WriteLine();
+            /* crap
+            //write the corners
+            buffer[0] = inArr[0];
+            buffer[width + 1] = inArr[width - 1];
+            buffer[(width + 2) * (height + 1)] = inArr[(width) * (height - 1)];
+            buffer[buffer.Length - 1] = inArr[inArr.Length - 1];
+
+            //write the sides
+            for (int i = 0; i < height; i++)
+            {
+                buffer[i*(width + 2)] = inArr[i*width];
+                buffer[i*(width + 2) + (width + 1)] = inArr[i*width + (width - 1)];
+            }
+
+            for (int i = 0; i < height; i++)
+                for (int j = 0; j < width; j++)
+                    buffer[(i + 1)*(width + 2) + j + 1] = inArr[i*width + j];
+            */
+
+            int buf1 = 0;
+            int buf2 = 1;
+            int buf3 = 2;
+            //int tempInd = 0;
+            /*for (int row = 0; row < height / _sharpnessArea[1]; row++)
+            {
+                for (int col = 0; col < width / _sharpnessArea[0]; col++)
+                {
+                    int bufInd = 0;
+                    int temp = buffer[buf1 * 3] + 2*buffer[buf1*3 + 1] + buffer[buf1*3 + 2] - buffer[buf3 * 3] - 2*buffer[buf3*3 + 1] - buffer[buf3*3 + 2];
+                    int[] temp2 = new int [2] {buffer[buf1 * 3] + 2*buffer[buf2*3] + buffer[buf3*3] - buffer[buf1 * 3 + 2] - 2*buffer[buf2*3 + 2] - buffer[buf3*3 + 2], 
+                        buffer[buf1 * 3 + 1] + 2*buffer[buf2*3 + 1] + buffer[buf3*3 + 1] - buffer[buf1 * 3 + 3] - 2*buffer[buf2*3 + 3] - buffer[buf3*3 + 3]};
+                    for (int j = (row * _sharpnessArea[1]) + (col * _sharpnessArea[0]); j < ((row + 1) * _sharpnessArea[1]) + (col * _sharpnessArea[0]); j += width)
+                    {
+                        for (int k = 0; k < _sharpnessArea[0]; k++ )
+                        {
+                            tempInd = k%2;
+                            addArr[j + k] = temp*temp + temp2[tempInd]*temp2[tempInd];
+                            temp += buffer[buf1 * 3 + k + 2] - buffer[buf3 * 3 + k + 2] - (buffer[buf1 * 3 + k] - buffer[buf3 * 3 + k]);
+                            temp2[tempInd] += -() 
+                        }
+                        buf1 = (buf1 + 2) % 3;
+                        buf2 = (buf2 + 2) % 3;
+                        buf3 = (buf3 + 2) % 3;
+                        int t2 = 1;
+                        for (int t = j; t < j + sWidth; t++)
+                            buffer[(bufInd % 3) * (sWidth + 2) + t2++] = inArr[j + t];
+                        buffer[(bufInd % 3) * (sWidth + 2)] = inArr[j];
+                        buffer[(bufInd % 3) * (sWidth + 2) + sWidth + 1] = inArr[j + sWidth - 1];
+                        bufInd++;
+                    }
+                    outArr[row * (width / _sharpnessArea[0]) + col] = addArr.Sum();
+                }
+                
+            }*/
+            /*test variables */
+            int[] test = new int[12];
+            int horizontal;
+            int vertical;
+            /*
+            for (int i = 0; i < outArr.Length; i++)
+                outArr[i] = 0;
+             */
+            int y = 0;
+            //int scale = width / sWidth / sHeight;
+            try { 
+            for (y = 0; y < height - 2; y++)
+            {
+                if (y + 1 == height)
+                    Console.WriteLine(y);
+                buffer[buf3 * (width + 2)] = inArr[(y + 1) * width];
+                buffer[buf3 * (width + 2) + width + 1] = inArr[(y + 1) * width + width - 1];
+                for (int i = 0; i < width; i++)
+                    buffer[buf3 * (width + 2) + i + 1] = inArr[(y + 1) * width + i];
+                for (int x = 1; x < width + 1; x++)
+                {
+                    horizontal = buffer[(buf1 * (width + 2)) + x - 1] + 2 * buffer[(buf1 * (width + 2)) + x] + buffer[(buf1 * (width + 2)) + x + 1]
+                        - buffer[(buf3 * (width + 2)) + x - 1] - 2 * buffer[(buf3 * (width + 2)) + x] - buffer[(buf3 * (width + 2)) + x + 1];
+                    vertical = -buffer[(buf1 * (width + 2)) + x - 1] - 2*buffer[(buf2 * (width + 2)) + x - 1] - buffer[(buf3 * (width + 2)) + x - 1]
+                        + buffer[(buf1 * (width + 2)) + x + 1] + 2*buffer[(buf2 * (width + 2)) + x + 1] + buffer[(buf3 * (width + 2)) + x + 1];
+
+                    outArr[y * width + x - 1] += horizontal * horizontal + vertical * vertical;
+                }
+                buf1 = (y) % 3;
+                buf2 = (y + 1) % 3;
+                buf3 = (y + 2) % 3;
+
+            }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(y);
+            }
+            
+            for (; y < height + 1; y++)
+            {
+                for (int x = 1; x < width + 1; x++)
+                {
+                    horizontal = buffer[(buf1 * (width + 2)) + x - 1] + 2 * buffer[(buf1 * (width + 2)) + x] + buffer[(buf1 * (width + 2)) + x + 1]
+                        - buffer[(buf3 * (width + 2)) + x - 1] - 2 * buffer[(buf3 * (width + 2)) + x] - buffer[(buf3 * (width + 2)) + x + 1];
+                    vertical = -buffer[(buf1 * (width + 2)) + x - 1] - 2 * buffer[(buf2 * (width + 2)) + x - 1] - buffer[(buf3 * (width + 2)) + x - 1]
+                        + buffer[(buf1 * (width + 2)) + x + 1] + 2 * buffer[(buf2 * (width + 2)) + x + 1] + buffer[(buf3 * (width + 2)) + x + 1];
+
+                    outArr[(y - 1) * width + x - 1] += horizontal * horizontal + vertical * vertical;
+                }
+                if (y < height + 1)
+                {
+                    buf1 = (y - 1) % 3;
+                    buf2 = y % 3;
+                    buf3 = (y + 1) % 3;
+                    buffer[buf1 * (width + 2)] = inArr[(height - 1) * width];
+                    buffer[buf1 * (width + 2) + width + 1] = inArr[(height - 1) * width + width - 1];
+                    for (int i = 0; i < width; i++)
+                        buffer[((y - 1) % 3) * (width + 2) + i + 1] = inArr[(height - 1) * width + i];
+                }
+            }
+
+                return outArr;
+        }
     }
 }
