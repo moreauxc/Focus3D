@@ -32,13 +32,12 @@ namespace Focus3D
         private BackgroundWorker bw1, bw2, bw3, bw4;
         private byte[] byteBuffer;
         private byte[] prevBuffer;
-        private int[] depthBuffer;
+        private byte[] depthBuffer;
         private int[] intBuffer;
         private int[] _sharpnessArea;
         private int[] _sharpnessMap;
-        private FocusMap bufferMapNew, bufferMapOld;
+        private FocusMap bufferMap, bufferMap2;
         private Windows.Foundation.Size _previewFrameSize = new Windows.Foundation.Size();
-        public enum FocusMethod { Variance, Sobel };
         // Constructor
         public MainPage()
         {
@@ -88,32 +87,10 @@ namespace Focus3D
 
             wb4 = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
             this.MainImage4.Source = wb4;
-            depthBuffer = new int[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
-            int black = BitConverter.ToInt32(new byte[] { 0, 0, 0, 255 }, 0);
-            for (int i = 0; i < depthBuffer.Length; i++) depthBuffer[i] = black;
-                byteBuffer = new byte[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
+            depthBuffer = new byte[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
+            byteBuffer = new byte[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
             prevBuffer = new byte[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
             intBuffer = new int[(int)(camManual.PreviewResolution.Width * camManual.PreviewResolution.Height)];
-
-            if (camManual != null)
-            {
-                // LandscapeRight rotation when camera is on back of phone.
-                int landscapeRightRotation = 180;
-
-                // Rotate video brush from camera.
-                if (this.Orientation == PageOrientation.LandscapeRight)
-                {
-                    // Rotate for LandscapeRight orientation.
-                    viewfinderBrush.RelativeTransform =
-                        new CompositeTransform() { CenterX = 0.5, CenterY = 0.5, Rotation = landscapeRightRotation };
-                }
-                else
-                {
-                    // Rotate for standard landscape orientation.
-                    viewfinderBrush.RelativeTransform =
-                        new CompositeTransform() { CenterX = 0.5, CenterY = 0.5, Rotation = 0 };
-                }
-            }
         }
 
         void photoDevice_PreviewFrameAvailable(ICameraCaptureDevice sender, object args)
@@ -181,8 +158,6 @@ namespace Focus3D
                 bw4.WorkerSupportsCancellation = true;
                 bw4.DoWork += bw_DoWork;
                 bw4.RunWorkerCompleted += bw_RunWorkerCompleted;
-
-                
             }
             else
             {
@@ -217,14 +192,6 @@ namespace Focus3D
                 camManual.PreviewFrameAvailable -= photoDevice_PreviewFrameAvailable;
                 // Release memory, ensure garbage collection.
             }
-            wb = null;
-            wb2 = null;
-            wb3 = null;
-            wb4 = null;
-            depthBuffer = null;
-            byteBuffer = null;
-            prevBuffer = null;
-            intBuffer = null;
         }
 
         // Update the UI if initialization succeeds.
@@ -289,9 +256,8 @@ namespace Focus3D
                     CameraCapturePropertyRange range = PhotoCaptureDevice.GetSupportedPropertyRange(CameraSensorLocation.Back, KnownCameraGeneralProperties.ManualFocusPosition);
                     UInt32 max = (UInt32)range.Max;
                     UInt32 min = (UInt32)range.Min;
-                    /*if (!((bool)checkboxSave.IsChecked))
+                    if (!((bool)checkboxSave.IsChecked))
                     {
-                     */
                         /*
                         if (focusRange >= max - 4)
                             focusRange = (int)max - 10;
@@ -309,24 +275,24 @@ namespace Focus3D
 
                         }
                         */
-                        for (int i = 500; i < (int)max; i += (int)(50 * 500/(i*1.5)))
+                        for (int i = 500; i < (int)max; i += ((int)max/100))
                         {
                             camManual.SetProperty(KnownCameraGeneralProperties.ManualFocusPosition, i);
                             focusRange = i;
                             await camManual.FocusAsync();
                             camManual.GetPreviewBufferY(byteBuffer);
-                            generateSharpnessMap(ref byteBuffer);
+                            generateSharpnessMap(byteBuffer);
                         }
 
-                        /*for (int i = 0; i < byteBuffer.Length; i++)
+                        for (int i = 0; i < byteBuffer.Length; i++)
                         {
                             intBuffer[i] = BitConverter.ToInt32(new byte[] { depthBuffer[i], depthBuffer[i], depthBuffer[i], 255 }, 0);
 
-                        }*/
+                        }
                             Deployment.Current.Dispatcher.BeginInvoke(delegate()
                             {
                                 // Copy to WriteableBitmap.
-                                depthBuffer.CopyTo(wb.Pixels, 0);
+                                intBuffer.CopyTo(wb.Pixels, 0);
                                 wb.Invalidate();
 
                             });
@@ -405,7 +371,7 @@ namespace Focus3D
 
                         });
                          */
-                    /*}
+                    }
                     else
                     {
                         /*var wbitmap = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
@@ -423,12 +389,11 @@ namespace Focus3D
                             }
                         }
                          */
-                        /*
-                        //byte[] yBuffer = new byte[(int)camManual.PreviewResolution.Width * (int)camManual.PreviewResolution.Height];
-                        //for (int i = 0; i < yBuffer.Length; i++)
-                            //yBuffer[i] = (byte) (i/((int)camManual.PreviewResolution.Width));
+                        byte[] yBuffer = new byte[(int)camManual.PreviewResolution.Width * (int)camManual.PreviewResolution.Height];
+                        for (int i = 0; i < yBuffer.Length; i++)
+                            yBuffer[i] = (byte) (i/((int)camManual.PreviewResolution.Width));
                          
-                        //int[] sharpnessTest = sobel(ref yBuffer, (int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
+                        int[] sharpnessTest = edgeDetect(yBuffer, (int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
                         var wbitmap = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
                         camManual.GetPreviewBufferArgb(wbitmap.Pixels);
                         using (var stream = new MemoryStream())
@@ -437,7 +402,7 @@ namespace Focus3D
                             stream.Seek(0, SeekOrigin.Begin);
                             new MediaLibrary().SavePicture("focus_at_" + focusRange + ".jpg", stream);
                         }
-                    }*/
+                    }
                 }
                 catch (Exception eg)
                 {
@@ -630,21 +595,16 @@ namespace Focus3D
 
         private void ClearButton_Click(object sender, RoutedEventArgs e)
         {
-            wb = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
-            wb2 = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
-            wb3 = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
-            wb4 = new WriteableBitmap((int)camManual.PreviewResolution.Width, (int)camManual.PreviewResolution.Height);
-            /*
-            int[] b = new int[wb.Pixels.Length];
-            for  (int i = 0; i < wb.Pixels.Length; i++)
+            int[] b = new int[wb.PixelWidth * wb.PixelHeight];
+            for  (int i = 0; i < wb.PixelWidth * wb.PixelHeight; i++)
                 b[i] = 0;
             b.CopyTo(wb.Pixels, 0);
             b.CopyTo(wb2.Pixels, 0);
             b.CopyTo(wb3.Pixels, 0);
-            b.CopyTo(wb4.Pixels, 0);*/
+            b.CopyTo(wb4.Pixels, 0);
         }
 
-        private void generateSharpnessMap(ref byte[] data)
+        private void generateSharpnessMap(byte[] data)
         {
             // Dimensions of the original frame
             int w = (int)camManual.PreviewResolution.Width;
@@ -663,8 +623,8 @@ namespace Focus3D
             //{
             //    _sharpnessMap = new int[hs * ws];
             //}
-            if (bufferMapNew == null)
-                bufferMapNew = new FocusMap(ws, hs);
+            if (bufferMap == null)
+                bufferMap = new FocusMap(ws, hs);
 
             
             // Calculate sharpness for each sub image
@@ -676,39 +636,35 @@ namespace Focus3D
                 for (x = 0; x < ws; x++)
                 {
                     sharpness = calculateSharpness_variance(x * ws, y * hs, ws, hs, w, data);
-                    bufferMapNew.set(y * _sharpnessArea[0] + x, sharpness);
+                    bufferMap.set(y * _sharpnessArea[0] + x, sharpness);
                 }
             }
              */
-            if ((bool)checkboxSave.IsChecked)
-                bufferMapNew.setMap(sobel(ref data, w, h));
-            else
-                bufferMapNew.setMap(calculateSharpness_variance(ref data, w, h, 3));
-            if (bufferMapOld == null)
+            bufferMap.set(edgeDetect(data, w, h));
+            if (bufferMap2 == null)
             {
-                bufferMapOld = new FocusMap(ws, hs);
-                bufferMapOld.setMap(bufferMapNew.Map);
+                bufferMap2 = new FocusMap(ws, hs);
+                bufferMap2.set(bufferMap.get());
             }
-            bool[] cmpSet = bufferMapNew > bufferMapOld;
-            int focusColor = (int) (255 - (Math.Pow((double)(focusRange - 500) / (max - 500), .7) * 255));
+            bool[] cmpSet = bufferMap > bufferMap2;
+            byte focusColor = (byte) (Math.Pow((double)(focusRange - 500) / (max - 500), .5) * 255);
             int[] testIndices = new int[depthBuffer.Length];
             int ind = 0;
             int prevLoc = 0;
             for (int k = 0; k < cmpSet.Length; k++)
             {
-                if (cmpSet[k] && bufferMapNew.Triggers[k] != FocusMap.Trigger.Drawn)
-                    bufferMapNew.Triggers[k] = FocusMap.Trigger.Triggered;
-                else if (bufferMapOld.Triggers[k] == FocusMap.Trigger.Triggered)
+                if (cmpSet[k])
+                    bufferMap.setTrigger(k);
+                else if (bufferMap2.triggered(k))
                 {
-                    bufferMapNew.Triggers[k] = FocusMap.Trigger.Drawn;
+                    //bufferMap.cancelTrigger(k);
                     int location = (int)((double)(k / ws) / hs * h * w + ((double)(k % ws) / ws * w));
                     
                     for (int y = 0; y < _sharpnessArea[1]; y++)
                         for (int x = 0; x < _sharpnessArea[0]; x++)
                         {
-                            byte [] d = new byte[] { (byte)focusColor, 0, (byte)(255 - focusColor), 255 };
-                            wb4.Pixels[k] = BitConverter.ToInt32(d, 0);
-                            depthBuffer[location + y * w + x] = BitConverter.ToInt32(d, 0);
+                            testIndices[ind++] = focusColor;
+                            depthBuffer[location + y * w + x] = focusColor;
                         }
                     if (location != prevLoc)
                     {
@@ -717,135 +673,30 @@ namespace Focus3D
                     }
                 }
             }
-            Deployment.Current.Dispatcher.BeginInvoke(delegate()
-            {
-                // Copy to WriteableBitmap.
-                //testIndices.CopyTo(wb4.Pixels, 0);
-                wb4.Invalidate();
-
-            });
-            bufferMapOld.setTriggers(bufferMapNew.Triggers);
-            bufferMapOld.setMap(bufferMapNew.Map);
+            bufferMap2.set(bufferMap.get());
+            bufferMap2.setTrigger(bufferMap.triggered());
         }
 
-        private int[] calculateSharpness_variance(ref byte[] inArr, int width, int height, int stride)
+        private int calculateSharpness_variance(int x, int y, int w, int h, int stride, byte[] data)
         {
-            double lumSum = 0;
-            double lumSquared = 0;
-            double lum = 0;
-            if (stride % 2 == 0)
-                stride++;
-            if (stride < 3)
-                stride = 3;
-            int numPixels = stride * stride;
-            int[] outArr = new int[inArr.Length];
-            int halfStride = (stride / 2);
-            int bufWidth = (width + 2 * halfStride);
-            byte[] buffer = new byte[bufWidth * stride];
+            int lumSum = 0;
+            int lumSquared = 0;
+            int numPixels = w * h;
 
-            //Initialize buffer
-            int i;
-            for (i = 0; i < halfStride + 1; i++)
+            int i, j;
+
+            for (j = y; j < y + h; j++)
             {
-                for (int j = 0; j < halfStride; j++ )
+                for (i = x; i < x + w; i++)
                 {
-                    buffer[i * bufWidth + j] = inArr[0];
-                    buffer[i * bufWidth + width + 1 + j] = inArr[width - 1];
-                }
-                
-                for (int j = 0; j < width; j++)
-                {
-                    buffer[i * bufWidth + j + 1] = inArr[j];
-                }
+                    int lum = data[j * stride + i];
 
-            }
-            for (i = halfStride + 1; i < stride - 1; i++)
-            {
-                for (int j = 0; j < halfStride; j++)
-                {
-                    buffer[i * bufWidth + j] = inArr[0];
-                    buffer[i * bufWidth + width + 1 + j] = inArr[width - 1];
-                }
-                for (int j = 0; j < width; j++)
-                {
-                    buffer[i * bufWidth + j + 1] = inArr[(i - halfStride) * width + j];
-                }
-
-            }
-            int[] buf = Enumerable.Range(0, stride).ToArray<int>();
-            int y = 0;
-
-            //Calculate Luminance values
-            for (y = 0; y < height - halfStride; y++)
-            {
-                //write newest buffer row
-                //sides
-                for (int j = 0; j < halfStride; j++)
-                {
-                    buffer[buf[stride - 1] * bufWidth + j] = inArr[(y + halfStride) * width];
-                    buffer[buf[stride - 1] * bufWidth + width + 1 + j] = inArr[(y + halfStride) * width + width - 1];
-                }
-                //inner
-                for (int j = 0; i < width; i++)
-                    buffer[buf[stride - 1] * bufWidth + j + 1] = inArr[(y + halfStride) * width + j];
-
-                //calc luminance
-                for (int x = halfStride; x < width + halfStride; x++)
-                {
-                    for (int k = 0; k < stride; k++)
-                        for (int j = -halfStride; j <= halfStride; j++ )
-                            lum += buffer[(buf[k] * bufWidth) + x + j];
-
-                    lumSum = (lum / numPixels);
-                    lumSquared = ((lum * lum) / numPixels);
-                    outArr[y * width + x - halfStride] = (int)(lumSquared - (lumSum * lumSum));
-                }
-                //shuffle buffer. oldest data gets overwritten
-                for (int k = 0; k < stride; k++)
-                    buf[k] = (buf[k] + 1) % stride;
-            }
-
-            //last rows
-            for (; y < height + halfStride; y++)
-            {
-                for (int x = halfStride; x < width + halfStride; x++)
-                {
-                    for (int k = 0; k < stride; k++)
-                        for (int j = -halfStride; j <= halfStride; j++)
-                            lum += buffer[(buf[k] * bufWidth) + x + j];
-
-                    lumSum = (lum / numPixels);
-                    lumSquared = ((lum * lum) / numPixels);
-                    outArr[(y - halfStride) * width + x - halfStride] = (int)(lumSquared - (lumSum * lumSum));
-                }
-                if (y < height + halfStride - 1)
-                {
-                    for (int k = 0; k < stride; k++)
-                        buf[k] = (buf[k] + 1) % stride;
-                    for (int j = 0; j < halfStride; j++)
-                    {
-                        buffer[buf[stride - 1] * bufWidth + j] = inArr[(height - 1) * width];
-                        buffer[buf[stride - 1] * bufWidth + width + 1 + j] = inArr[(height - 1) * width + width - 1];
-                    }
-                    for (int j = 0; i < width; i++)
-                        buffer[buf[stride - 1] * (bufWidth) + j + 1] = inArr[(height - 1) * width + j];
+                    lumSum += (lum / numPixels);
+                    lumSquared += ((lum * lum) / numPixels);
                 }
             }
 
-            return outArr;
-
-            for (y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                {
-                    lum = inArr[y * width + x];
-
-                    lumSum= (lum / numPixels);
-                    lumSquared = ((lum * lum) / numPixels);
-                    outArr[y * width + x] = (int)(lumSquared - (lumSum * lumSum));
-                }
-                     //+= (int)((sum * sum + vertical * vertical + 1170450.0) / 2340900.0 * 255);
-
-            return outArr;
+            return lumSquared - (lumSum * lumSum);
         }
 
         private void TextBox_LostFocus(object sender, RoutedEventArgs e)
@@ -880,7 +731,7 @@ namespace Focus3D
             textBox.SelectAll();
         }
 
-        private int[] sobel(ref byte[] inArr, int width, int height)
+        private int[] edgeDetect(byte[] inArr, int width, int height)
         {
             //int width = (int) _previewFrameSize.Width;
             //int height = (int)_previewFrameSize.Height;
@@ -971,6 +822,7 @@ namespace Focus3D
              */
             int y = 0;
             //int scale = width / sWidth / sHeight;
+            try { 
             for (y = 0; y < height - 2; y++)
             {
                 if (y + 1 == height)
@@ -986,12 +838,17 @@ namespace Focus3D
                     vertical = -buffer[(buf1 * (width + 2)) + x - 1] - 2*buffer[(buf2 * (width + 2)) + x - 1] - buffer[(buf3 * (width + 2)) + x - 1]
                         + buffer[(buf1 * (width + 2)) + x + 1] + 2*buffer[(buf2 * (width + 2)) + x + 1] + buffer[(buf3 * (width + 2)) + x + 1];
 
-                    outArr[y * width + x - 1] += (int)((horizontal * horizontal + vertical * vertical + 1170450.0) / 2340900.0 * 255);
+                    outArr[y * width + x - 1] += horizontal * horizontal + vertical * vertical;
                 }
                 buf1 = (y) % 3;
                 buf2 = (y + 1) % 3;
                 buf3 = (y + 2) % 3;
 
+            }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(y);
             }
             
             for (; y < height + 1; y++)
@@ -1003,7 +860,7 @@ namespace Focus3D
                     vertical = -buffer[(buf1 * (width + 2)) + x - 1] - 2 * buffer[(buf2 * (width + 2)) + x - 1] - buffer[(buf3 * (width + 2)) + x - 1]
                         + buffer[(buf1 * (width + 2)) + x + 1] + 2 * buffer[(buf2 * (width + 2)) + x + 1] + buffer[(buf3 * (width + 2)) + x + 1];
 
-                    outArr[(y - 1) * width + x - 1] += (int)((horizontal * horizontal + vertical * vertical + 1170450.0) / 2340900.0 * 255);
+                    outArr[(y - 1) * width + x - 1] += horizontal * horizontal + vertical * vertical;
                 }
                 if (y < height + 1)
                 {

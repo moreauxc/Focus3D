@@ -9,56 +9,64 @@ namespace Focus3D
     class FocusMap
     {
         private int[] _map;
-        public int[] Map
-        {
-            get
-            {
-                return _map;
-            }
-        }
-        private Trigger[] _triggered;
-        public Trigger[] Triggers
-        {
-            get
-            {
-                return _triggered;
-            }
-        }
+        private bool[] _triggered;
         private int _regionsX;
         private int _regionsY;
         protected int length;
-        public enum Trigger {Unseen = 0, Triggered, Drawn };
+
         public FocusMap(int x, int y)
         {
             _map = new int[x * y];
-            _triggered = new Trigger[x * y];
+            _triggered = new bool[x * y];
             for (int i = 0; i < _triggered.Length; i++)
-                _triggered[i] = Trigger.Unseen;
+                _triggered[i] = false;
             _regionsX = x;
             _regionsY = y;
             length = _map.Length;
         }
 
-        public bool setMap(int[] i)
+        public int get(int i)
+        {
+            if (i < this.length)
+                return _map[i];
+            else
+                throw new IndexOutOfRangeException("Index out of range\n");
+        }
+
+        public int[] get()
+        {
+                return _map;
+        }
+
+        public bool set(int[] i)
         {
             if (i.Length == this.length)
             {
-                i.CopyTo(_map, 0);
+                _map = i;
                 return true;
             }
             return false;
             
         }
 
-        public bool setTriggers(Trigger[] i)
-        {
-            if (i.Length == this.length)
-            {
-                i.CopyTo(_triggered, 0);
-                return true;
-            }
-            return false;
+        public void setTrigger(bool[] b)
+        { _triggered = b; }
 
+        public void setTrigger(int i)
+        { _triggered[i] = true; }
+
+        public void cancelTrigger(int i)
+        { _triggered[i] = false; }
+
+        public bool triggered(int i)
+        { return _triggered[i]; }
+
+        public bool[] triggered()
+        { return _triggered; }
+
+        public void set(int i, int v)
+        {
+            this._map[i] = v;
         }
 
         public static bool[] operator > (FocusMap A, FocusMap B) {
@@ -67,7 +75,7 @@ namespace Focus3D
             {
                 map = new bool[A._regionsY * A._regionsX];
                 for (int i = 0; i < A.length; i++)
-                    map[i] = A.Map[i] - B.Map[i] > 10;
+                    map[i] = Math.Abs(A.get(i) - B.get(i)) > 50;
             }
             else
                 map = new bool[1] {false};
@@ -81,7 +89,7 @@ namespace Focus3D
             {
                 map = new bool[A._regionsY * A._regionsX];
                 for (int i = 0; i < A.length; i++)
-                    map[i] = Math.Abs(A.Map[i] - B.Map[i]) < Math.Abs(A.Map[i] / 2);
+                    map[i] = A.get(i) < B.get(i);
             }
             else
                 map = new bool[1] {false};
